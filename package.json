@@ -1,0 +1,9 @@
+{
+  "name": "jalachakra-engineering-simulation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node ./tests/smoke.mjs",
+    "verify": "bash ./verify.sh"
+  }
+}

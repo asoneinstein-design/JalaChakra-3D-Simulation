@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JalaChakra — Hydro-Mechanical Biogas Network Simulator</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="importmap">
+    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js"}}
+  </script>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand"><div class="logo">JC</div><div><h1>JalaChakra</h1><span>hydro-mechanical biogas network</span></div></div>
+    <section class="panel compact">
+      <div class="row"><div><b class="section-title">Simulation</b><div class="muted">Fixed-step mechanics + network mass balance</div></div><div class="status"><span id="runDot" class="dot idle"></span><span id="runState">PAUSED</span></div></div>
+      <div class="btn3"><button id="startBtn">START</button><button id="pauseBtn">PAUSE</button><button id="resetBtn">RESET</button></div>
+      <div class="btn3"><button id="stepBtn">STEP</button><button id="run24Btn">24 h TEST</button><button id="exportBtn">EXPORT CSV</button></div>
+      <label>Simulation speed <output id="speedOut">8×</output><input id="speed" type="range" min="0.5" max="60" step="0.5" value="8" /></label>
+      <label>Demand scale <output id="demandOut">100%</output><input id="demandScale" type="range" min="0.4" max="3" step="0.05" value="1" /></label>
+    </section>
+
+    <section class="panel"><b class="section-title">Demand scenarios</b><div class="scenario"><button id="profileDay">24 h DAY</button><button id="profileNight">NIGHT</button><button id="profilePeak">PEAK</button></div><p class="muted tiny">DAY uses normalized morning/evening household cooking peaks and preserves the 8.22 Nm³/day baseline. PEAK is a deliberate stress case.</p></section>
+
+    <section class="panel"><b class="section-title">Engineering parameters</b>
+      <label>Agitator trip pressure <output id="tripOut">11.0 kPa</output><input id="tripPressure" type="range" min="8" max="15" step="0.5" value="11" /></label>
+      <label>Relief set pressure <output id="reliefOut">19.0 kPa</output><input id="reliefPressure" type="range" min="18" max="20" step="0.5" value="19" /></label>
+      <label>Surge target region <output id="surgeTargetOut">10.2 kPa</output><input id="surgeTarget" type="range" min="8.2" max="13" step="0.1" value="10.2" /></label>
+      <label>Purifier capacity <output id="purifierOut">1.00×</output><input id="purifierScale" type="range" min="0.4" max="1.5" step="0.01" value="1" /></label>
+      <label>Particle density <input id="particleDensity" type="range" min="0" max="600" step="10" value="240" /></label>
+    </section>
+
+    <section class="panel"><b class="section-title">Fault injection</b>
+      <div class="fault-group"><div class="muted tiny">Network</div><div class="fault-grid"><button id="faultHigh" data-fault="highPressure">HIGH PRESSURE</button><button id="faultDemand" data-fault="excessiveDemand">EXCESS DEMAND</button></div></div>
+      <div class="fault-group"><div class="muted tiny">Agitator jam</div><div class="fault-grid"><button data-fault="agitatorJam1">JAM A</button><button data-fault="agitatorJam2">JAM B</button><button data-fault="agitatorJam3">JAM C</button><button data-fault="agitatorJam4">JAM D</button></div></div>
+      <div class="fault-group"><div class="muted tiny">Priority valve fault (click: stuck OPEN → stuck CLOSED → normal)</div><div class="fault-grid"><button data-fault="valveA">VALVE A</button><button data-fault="valveB">VALVE B</button><button data-fault="valveC">VALVE C</button><button data-fault="valveD">VALVE D</button></div></div>
+      <div class="fault-group"><div class="muted tiny">Purifier blockage</div><div class="fault-grid"><button data-fault="purifier1">STAGE 1</button><button data-fault="purifier2">STAGE 2</button><button data-fault="purifier3">STAGE 3</button><button data-fault="purifier4">STAGE 4</button></div></div>
+      <div class="fault-grid"><button data-fault="surgeFull">SURGE FULL</button><button data-fault="surgeEmpty">SURGE EMPTY</button></div>
+      <button id="clearFaults" class="wide">CLEAR ALL FAULTS</button>
+    </section>
+
+    <section class="panel"><b class="section-title">Camera & interaction</b><div class="cam-grid"><button id="homeView">HOME</button><button id="isoView">ISOMETRIC</button><button id="topView">TOP</button><button id="zoomIn">ZOOM +</button><button id="zoomOut">ZOOM −</button><button id="helpToggle">CONTROLS</button><button data-camera="system">SYSTEM</button><button data-camera="agitator">AGITATORS</button><button data-camera="manifold">MANIFOLD</button><button data-camera="surge">SURGE</button><button data-camera="purifier">PURIFIER</button><button data-camera="meters">METERS</button><button data-camera="households">HOMES</button></div><p class="muted tiny">Left drag = orbit/rotate • Shift+left/right/middle drag = pan • wheel = zoom • double-click = focus.</p></section>
+
+    <section class="panel"><b class="section-title">Agitator cycle monitor</b><div id="cycleRows"></div><div class="sequence"><i>FILL</i><i>TRIP</i><i>RELEASE</i><i>ADVANCE</i><i>RESET</i></div></section>
+
+    <section class="panel assumption"><b class="section-title">Design-basis consistency</b><p><strong>Priority valves are source-side:</strong> four digester outlets A–D feed the communal header through 8 / 10 / 12 / 14 kPa pressure traps. Household consumers are downstream of purification and do not own those priority valves.</p><p><strong>Purifier basis:</strong> the final project architecture is simulated as biotrickling/coir → laterite → gravity-fed lime → geo-cool condensate. The supplied cartridge blueprint (iron oxide → laterite → silica gel → activated carbon) is retained as a separately documented mechanical variant, not silently mixed.</p><p><strong>Daily demand:</strong> the supplied 8.22 Nm³/day target is 0.3425 Nm³/h community average, not 2.05 Nm³/h per household. The simulator scales the supplied four baseline flows to that total.</p><p class="muted">All unverified plant-sizing numbers are marked in <code>src/core/config.js</code> as simulation assumptions.</p></section>
+  </aside>
+
+  <main id="viewport">
+    <div id="scene"></div>
+    <div class="topbar"><div class="title-chip">JalaChakra <span>• complete process model</span></div><div class="sim-clock">t = <span id="simTime">0.00</span> h</div><div class="selection" id="selection">System overview</div></div>
+    <div class="processbar"><span>4 DIGESTERS</span><b>→</b><span>4 ESCAPEMENTS</span><b>→</b><span>4 SOURCE VALVES</span><b>→</b><span>SURGE BELL</span><b>→</b><span>4-STAGE PURIFIER</span><b>→</b><span>4 METERS</span><b>→</b><span>4 HOMES</span></div>
+
+    <div class="telemetry-grid">
+      <div class="metric"><span>HEADER PRESSURE</span><b id="headerPressure">0.00 kPa</b><em>source manifold / downstream backpressure</em></div>
+      <div class="metric"><span>SOURCE FLOW</span><b id="production">0.00 Nm³/h</b><em>four digesters pooled</em></div>
+      <div class="metric"><span>COMMUNITY DEMAND</span><b id="totalDemand">0.000 Nm³/h</b><em>scaled to 8.22 Nm³/day baseline</em></div>
+      <div class="metric"><span>SURGE STORAGE</span><b id="storage">50%</b><em>18 L usable design basis</em></div>
+      <div class="metric"><span>PURIFIED FLOW</span><b id="purifiedFlow">0.000 Nm³/h</b><em>capacity-limited / blockage sensitive</em></div>
+      <div class="metric"><span>DELIVERED FLOW</span><b id="deliveredFlow">0.000 Nm³/h</b><em>sum of four branches</em></div>
+      <div class="metric"><span>DELIVERED VOLUME</span><b id="meterTotal">0.000 Nm³</b><em>sum of four mechanical meters</em></div>
+      <div class="metric good"><span>SERVICE FAIRNESS</span><b id="serviceJain">100.0%</b><em>Jain index of delivery / demand ratios</em></div>
+      <div class="metric"><span>FLOW JAIN INDEX</span><b id="flowJain">71.66%</b><em>baseline reported: 71.66%</em></div>
+      <div class="metric"><span>MASS-BALANCE RESIDUAL</span><b id="massResidual">0.0000 Nm³</b><em>should remain near 0</em></div>
+      <div class="metric"><span>METHANE</span><b id="methane">55.0%</b><em>composition model</em></div>
+      <div class="metric"><span>H₂S OUTLET</span><b id="h2s">420 ppm</b><em>purification quality</em></div>
+    </div>
+
+    <div class="control-help hidden" id="controlHelp"><b>CAMERA CONTROLS</b><div>Left drag: orbit / rotate</div><div>Shift + left / right / middle drag: pan</div><div>Wheel: zoom</div><div>Double-click component: focus + inspect</div><div>Space: start/pause</div><div>R: home • F: isometric • + / −: zoom</div><div>24 h TEST runs an accelerated offline-equivalent telemetry check in the live engine.</div></div>
+    <div class="alarm" id="alarmBanner"></div>
+
+    <div class="right-stack">
+      <section class="inspect hidden" id="inspectPanel"><button id="closeInspect" class="close">×</button><h2 id="inspectTitle">Component</h2><p id="inspectDesc">Click a process component.</p><div id="inspectStats"></div></section>
+      <section class="mini-panel"><b>Process quality / accumulator</b><div class="mini-grid"><div><span>Surge pressure</span><b id="bellPressure">0.00</b></div><div><span>Surge volume</span><b id="bellVolume">0.000</b></div><div><span>Total purifier ΔP</span><b id="dp">0.00</b></div><div><span>CO₂ outlet</span><b id="co2">38.0%</b></div><div><span>CH₄ purity</span><b id="methane2">55.0%</b></div><div><span>Dew point</span><b id="dew">0.0°C</b></div><div><span>Stage 1 health</span><b id="media1">100%</b></div><div><span>Stage 2 health</span><b id="media2">100%</b></div><div><span>Stage 3 health</span><b id="media3">100%</b></div><div><span>Stage 4 health</span><b id="media4">100%</b></div></div></section>
+    </div>
+
+    <section class="house-panel"><div class="row"><b>Household demand / delivery / service ratio</b><span class="muted">source thresholds A 8 • B 10 • C 12 • D 14 kPa</span></div><div id="houseRows"></div></section>
+    <section class="charts"><div class="chart"><b>Pressures: header + source A</b><canvas id="pressureChart"></canvas></div><div class="chart"><b>Source / delivered flow</b><canvas id="flowChart"></canvas></div><div class="chart"><b>Purity: H₂S / CH₄</b><canvas id="qualityChart"></canvas></div><div class="chart"><b>Surge storage / fairness</b><canvas id="storageChart"></canvas></div></section>
+    <section class="event-bar"><span>Last event</span><b id="eventText">No events</b></section>
+  </main>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
